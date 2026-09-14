@@ -69,6 +69,8 @@ public struct DefaultWKEngineConfigurationProvider: WKEngineConfigurationProvide
         configuration.mediaTypesRequiringUserActionForPlayback = parameters.autoPlay
         configuration.userContentController = WKUserContentController()
         configuration.allowsInlineMediaPlayback = true
+        configuration.allowsPictureInPictureMediaPlayback = true
+        configuration.allowsAirPlayForMediaPlayback = true
         configuration.dataDetectorTypes = DefaultWKEngineConfigurationProvider.defaultDataDetectorTypes
 
         // TODO: FXIOS-8086 - Evaluate if ignoresViewportScaleLimits is still needed
