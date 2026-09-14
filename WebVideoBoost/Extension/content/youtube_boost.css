@@ -1,0 +1,19 @@
+/* YouTube Boost / PiPフローティングボタン */
+#__ytb_pip_btn {
+  position: fixed;
+  right: 16px;
+  bottom: 88px;
+  z-index: 999999;
+  padding: 8px 14px;
+  font-size: 14px;
+  font-weight: 700;
+  color: #fff;
+  background: rgba(20, 20, 20, 0.82);
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  border-radius: 999px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+#__ytb_pip_btn:active {
+  background: rgba(255, 0, 0, 0.9);
+}

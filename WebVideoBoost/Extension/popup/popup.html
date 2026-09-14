@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<style>
+body { width: 220px; margin: 0; padding: 12px; font: 13px -apple-system, sans-serif; }
+h1 { font-size: 14px; margin: 0 0 8px; }
+.row { display: flex; align-items: center; justify-content: space-between; margin: 8px 0; }
+button.wide { width: 100%; padding: 8px; margin-top: 8px; font-size: 13px; font-weight: 700; }
+.hint { color: #666; font-size: 11px; margin-top: 8px; }
+</style>
+</head>
+<body>
+<h1>YouTube Boost</h1>
+<div class="row"><label for="pip">PiPボタン表示</label><input id="pip" type="checkbox"></div>
+<div class="row"><label for="bg">バックグラウンド維持</label><input id="bg" type="checkbox"></div>
+<button id="go" class="wide">今の動画をPiPにする</button>
+<div id="msg" class="hint"></div>
+<div class="hint">広告ブロックは含みません。uBOL等と併用してください。</div>
+<script src="popup.js"></script>
+</body>
+</html>

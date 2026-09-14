@@ -17,6 +17,8 @@ WebVideoBoost/
   Tools/
     ublock_to_webkit.py                # uBO/EasyList -> WebKit content-blocker JSON変換
     update_ubol_lists.sh               # リスト更新ワンコマンド
+  Extension/                           # Safari Web Extension (YouTube用PiP+BG。広告ブロックなし)
+    manifest.json + content/ + popup/ + icons/
   Docs/
     ARCHITECTURE.md
     FirefoxIntegration.md              # firefox-iosへの差分手順 (ファイル名:行番号付き)
