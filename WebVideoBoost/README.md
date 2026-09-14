@@ -44,16 +44,19 @@ boost.didEnterBackground()
 boost.enterPiP()
 ```
 
-## 広告ブロックリストの更新
+## 広告ブロックリスト (uBOL内包済み)
+
+uBOL既定セット相当の生リストを `FilterLists/` にバージョン固定で内包し、
+変換済みJSON (`Sources/WebVideoBoost/AdBlock/Lists/wvb-ubo-part-*.json`,
+約11.6万ルール) までコミット済み。取得なしでそのまま使える。
 
 ```bash
 cd WebVideoBoost/Tools
-./update_ubol_lists.sh ../Sources/WebVideoBoost/AdBlock/Lists          # フル版
-python3 ublock_to_webkit.py --out ../Sources/WebVideoBoost/AdBlock/ListsLite --lite  # 軽量版 (~1/3)
-# 生成物: wvb-ubo-part-N.json + cosmetic_selectors.json をアプリバンドルに追加
+./update_ubol_lists.sh    # 内包rawからJSON再生成 (通常は不要)
+./fetch_ubol_lists.sh     # 最新リストに更新したい時だけ
 ```
 
-変換方針は `Tools/ublock_to_webkit.py` 冒頭コメント参照 (表現できない高度記法はスキップして誤ブロックを防ぐ)。
+詳細は `FilterLists/README.md`。変換方針は `Tools/ublock_to_webkit.py` 冒頭参照。
 
 ## 省メモリ設計 (なぜ軽いか)
 

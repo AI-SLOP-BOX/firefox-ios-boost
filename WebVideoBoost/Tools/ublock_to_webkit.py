@@ -51,6 +51,7 @@ DEFAULT_URLS = [
     "https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/badware.txt",
     "https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/privacy.txt",
     "https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/unbreak.txt",
+    "https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/quick-fixes.txt",
 ]
 
 LITE_URLS = [

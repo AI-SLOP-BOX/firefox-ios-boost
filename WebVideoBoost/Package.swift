@@ -16,6 +16,7 @@ let package = Package(
                 .copy("BackgroundPlayback/background_playback.js"),
                 .copy("AdBlock/cosmetic.js"),
                 .copy("AdBlock/youtube_adskip.js"),
+                .copy("AdBlock/Lists"),
             ]
         ),
         .testTarget(

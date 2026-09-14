@@ -61,14 +61,22 @@ boost.exitPiP()
 `setupTrackingProtection(forTab:rules:)` (`:202-230`) で適用。
 cosmetic (要素非表示) は無し (`TrackingProtectionStats.js` は統計報告のみ)。
 
-### 2-1. リスト生成
+### 2-1. リスト (内包済み・取得不要)
+uBOL既定セット相当はコミット済みでそのまま使える:
+- 生リスト: `WebVideoBoost/FilterLists/` (8ファイル + `manifest.json` に版記録)
+- 変換済み: `WebVideoBoost/Sources/WebVideoBoost/AdBlock/Lists/wvb-ubo-part-{0,1,2}.json`
+  (約11.6万ルール。`css-display-none` 1500件埋め込み済み)
+
+Xcode側は `wvb-ubo-part-*.json` をアプリターゲットの Copy Bundle Resources に追加するだけ
+(既存の `disconnect-block-*.json` と同列に置くと分かりやすい)。
+SwiftPM参照なら `Bundle.module` から自動解決される。
+
+更新したい時だけ:
 ```bash
 cd WebVideoBoost/Tools
-./update_ubol_lists.sh ../../firefox-ios-boost/firefox-ios/Client/Assets/WebVideoBoostLists
-# 生成: wvb-ubo-part-N.json + cosmetic_selectors.json
+./fetch_ubol_lists.sh   # 最新取得 (manifest更新)
+./update_ubol_lists.sh  # JSON再生成
 ```
-生成JSONをXcodeの Copy Bundle Resources に追加する
-(既存の `disconnect-block-*.json` と同列に置くと分かりやすい)。
 
 ### 2-2. 競合回避: removeAllContentRuleLists() の追記方式化
 `ContentBlocker.swift:232-243 removeTrackingProtection(forTab:)` は現状:

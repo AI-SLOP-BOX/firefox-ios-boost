@@ -33,4 +33,22 @@ final class WebVideoBoostTests: XCTestCase {
         let n = MemorySaver.suspendInactive([a, b, playing], active: a, protected: [playing])
         XCTAssertEqual(n, 1)
     }
+
+    func testBundledUBOLListsLoad() {
+        // uBOL内包リストがBundle解決できること (回帰: ファイル名変更・抜け検出)
+        let names = ["wvb-ubo-part-0", "wvb-ubo-part-1", "wvb-ubo-part-2"]
+        var total = 0
+        for name in names {
+            guard let s = UBOLContentBlocker.loadTextResource(name: name, ext: "json") else {
+                XCTFail("missing bundled list: \(name)"); continue
+            }
+            guard let data = s.data(using: .utf8),
+                  let arr = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] else {
+                XCTFail("invalid JSON: \(name)"); continue
+            }
+            XCTAssertGreaterThan(arr.count, 0, name)
+            total += arr.count
+        }
+        XCTAssertGreaterThan(total, 50000, "uBOLフルセットが内包されていること")
+    }
 }

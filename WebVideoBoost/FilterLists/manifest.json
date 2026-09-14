@@ -1,0 +1,56 @@
+{
+ "fetched_at": "2026-09-14T00:00:00+00:00",
+ "fetched_by": "curl (manual)",
+ "files": {
+  "easylist.txt": {
+   "sha256": "8393301fea7c5fa167b43eac3dcba20b600e108b965e88c2cd5699f4635afb97",
+   "lines": 80625,
+   "bytes": 2123326
+  },
+  "easyprivacy.txt": {
+   "sha256": "1e93e2d69d47fef5f4044a59730ebc954a0160dc61c816e60743279a06dd6d0c",
+   "lines": 56840,
+   "bytes": 1502417
+  },
+  "peter-lowe.txt": {
+   "sha256": "292c5e4657abaa27e93cf6a223327a568ca081513bfbc514f9c9c244cdb5e47e",
+   "lines": 3573,
+   "bytes": 95202
+  },
+  "uassets-badware.txt": {
+   "sha256": "bbf5c1f8cce40961f32f5f361b856dafae67ec20faa3bb40169f85a20f1515c3",
+   "lines": 6380,
+   "bytes": 254595
+  },
+  "uassets-filters.txt": {
+   "sha256": "8899ddd89e88999bb5b95023edb706feac0ea336b017d6e9cfb36e8a79775d1d",
+   "lines": 10880,
+   "bytes": 471021
+  },
+  "uassets-privacy.txt": {
+   "sha256": "c203a41323e064b205d467ebd274aed82ccf996c7b91ce1666a87eb3741a2438",
+   "lines": 3333,
+   "bytes": 182502
+  },
+  "uassets-quick-fixes.txt": {
+   "sha256": "723339d9cf5ac007fee67f2011b55f2047a240a0136b5d67104333bf49ac8368",
+   "lines": 542,
+   "bytes": 76072
+  },
+  "uassets-unbreak.txt": {
+   "sha256": "d17744c97afd2f481d70bee564ad5db36d8724f938112773a28d5b4f62876f2e",
+   "lines": 6061,
+   "bytes": 279840
+  }
+ },
+ "sources": {
+  "easylist.txt": "https://easylist.to/easylist/easylist.txt",
+  "easyprivacy.txt": "https://easylist.to/easylist/easyprivacy.txt",
+  "peter-lowe.txt": "https://pgl.yoyo.org/adservers/serverlist.php?hostformat=hosts&showintro=0&mimetype=plaintext",
+  "uassets-filters.txt": "https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/filters.txt",
+  "uassets-badware.txt": "https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/badware.txt",
+  "uassets-privacy.txt": "https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/privacy.txt",
+  "uassets-unbreak.txt": "https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/unbreak.txt",
+  "uassets-quick-fixes.txt": "https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/quick-fixes.txt"
+ }
+}

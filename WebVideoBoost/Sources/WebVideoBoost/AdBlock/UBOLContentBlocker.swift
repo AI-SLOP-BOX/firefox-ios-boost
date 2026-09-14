@@ -77,13 +77,18 @@ public final class UBOLContentBlocker: NSObject {
 
     // MARK: - Helpers (public for tests / Firefox integration)
 
-    /// メインバンドル + SwiftPM Bundle.module からテキストリソースを読む
+    /// メインバンドル + SwiftPM Bundle.module からテキストリソースを読む。
+    /// 内包リスト (AdBlock/Lists/*.json) はサブディレクトリも探す。
     public static func loadTextResource(name: String, ext: String) -> String? {
         #if SWIFT_PACKAGE
         if let url = Bundle.module.url(forResource: name, withExtension: ext),
            let s = try? String(contentsOf: url, encoding: .utf8) { return s }
+        if let url = Bundle.module.url(forResource: name, withExtension: ext, subdirectory: "Lists"),
+           let s = try? String(contentsOf: url, encoding: .utf8) { return s }
         #endif
         if let url = Bundle.main.url(forResource: name, withExtension: ext),
+           let s = try? String(contentsOf: url, encoding: .utf8) { return s }
+        if let url = Bundle.main.url(forResource: name, withExtension: ext, subdirectory: "Lists"),
            let s = try? String(contentsOf: url, encoding: .utf8) { return s }
         return nil
     }
