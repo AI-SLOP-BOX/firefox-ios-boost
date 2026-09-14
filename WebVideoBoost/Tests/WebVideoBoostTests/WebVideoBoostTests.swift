@@ -51,4 +51,12 @@ final class WebVideoBoostTests: XCTestCase {
         }
         XCTAssertGreaterThan(total, 50000, "uBOLフルセットが内包されていること")
     }
+
+    func testAutoPiPHooksPresent() {
+        // 裏からの自動PiP試行フックの回帰テスト
+        guard let s = UBOLContentBlocker.loadTextResource(name: "video_pip", ext: "js") else { return }
+        XCTAssertTrue(s.contains("__wvbTryAutoPiP"))
+        XCTAssertTrue(s.contains("autoPictureInPicture"))
+        XCTAssertTrue(s.contains("enterpictureinpicture"))
+    }
 }

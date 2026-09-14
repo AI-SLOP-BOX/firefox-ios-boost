@@ -17,6 +17,10 @@ public final class WebVideoBoost {
     public var enableBackgroundAudio = true
     public var enableAdblock = true
     public var enablePiP = true
+    /// バックグラウンド突入時に自動PiPを試すか (既定false)。
+    /// 成功はタップ直後などtransient activationが残っている場合に限られる。
+    /// 音声継続が主目的ならfalseのままでよい (pause抑止で音は残る)。
+    public var autoPiPOnBackground = false
 
     public init() {
         self.pip = VideoPiPController()
@@ -64,6 +68,11 @@ public final class WebVideoBoost {
     public func didEnterBackground() {
         guard enableBackgroundAudio else { return }
         background.beginBackgroundGuard()
+        if enablePiP && autoPiPOnBackground {
+            pip.webView?.evaluateJavaScript(
+                "window.__wvbTryAutoPiP ? window.__wvbTryAutoPiP() : 'not-installed'",
+                completionHandler: nil)
+        }
     }
 
     /// 再生中かどうか。タブ解放 (`offloadBackgroundWebViews` 等) から外す判定に使う。

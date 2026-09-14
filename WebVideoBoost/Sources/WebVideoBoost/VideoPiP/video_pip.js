@@ -23,11 +23,17 @@
   }
 
   function hookVideo(v) {
-    if (!v || v.__wvbPipHooked) { return; }
+    if (!v || v.__wvbPipHooked) {
+      if (v && !v.__wvbAutoAttr) {
+        try { v.setAttribute('autoPictureInPicture', ''); v.__wvbAutoAttr = true; } catch (e2) {}
+      }
+      return;
+    }
     v.__wvbPipHooked = true;
     try { v.setAttribute('playsinline', ''); } catch (e) {}
     // iOS Safari/WKWebViewでは disablePictureInPicture が立っていると弹かれる
     try { v.disablePictureInPicture = false; } catch (e) {}
+    try { v.setAttribute('autoPictureInPicture', ''); v.__wvbAutoAttr = true; } catch (e) {}
     v.addEventListener('enterpictureinpicture', function () { post('enter'); });
     v.addEventListener('leavepictureinpicture', function () { post('leave'); });
     // webkit prefixed (古いiOS/YouTube埋め込み用)
@@ -110,8 +116,7 @@
     done('unsupported');
   }
 
-  window.__wvbExitPiP = function () {
-    try {
+  window.__wvbExitPiP = function () {    try {
       if (document.pictureInPictureElement && document.exitPictureInPicture) {
         document.exitPictureInPicture();
         return 'exiting';
@@ -130,6 +135,39 @@
     } catch (e) {}
     return 'nothing';
   };
+
+  // 裏からの自動PiP試行 (ベストエフォート)。native側はバックグラウンド突入時に呼ぶ。
+  // requestPictureInPictureにはtransient activationが必要なため、タップ直後などに限り成功する。
+  window.__wvbTryAutoPiP = function () {
+    try {
+      if (document.pictureInPictureElement) { return 'already'; }
+      var vids = document.querySelectorAll('video');
+      var v = null;
+      for (var i = 0; i < vids.length; i++) {
+        if (!vids[i].paused && !vids[i].ended && vids[i].readyState >= 2) { v = vids[i]; break; }
+      }
+      if (!v) { return 'no-playing-video'; }
+      hookVideo(v);
+      if (typeof v.requestPictureInPicture === 'function') {
+        var p = v.requestPictureInPicture();
+        if (p && typeof p.catch === 'function') { p.catch(function () { post('auto-pip-denied'); }); }
+        return 'auto-requested';
+      }
+      if (typeof v.webkitSetPresentationMode === 'function') {
+        v.webkitSetPresentationMode('picture-in-picture');
+        return 'auto-requested-prefixed';
+      }
+    } catch (e) {}
+    return 'auto-failed';
+  };
+
+  try {
+    if ('mediaSession' in navigator) {
+      navigator.mediaSession.setActionHandler('enterpictureinpicture', function () {
+        if (window.__wvbEnterPiP) { window.__wvbEnterPiP(); }
+      });
+    }
+  } catch (e) {}
 
   hookAll(document);
   try {
