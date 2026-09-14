@@ -49,10 +49,21 @@ self.webVideoBoost = boost
 
 ### 1-3. PiPボタンの配線例 (ツールバー/長押しメニュー)
 ```swift
-boost.enterPiP { result in /* 'enter' / 'no-video' / 'unsupported' */ }
+boost.enterPiP { result in /* 'enter' / 'no-video' / 'unsupported' / 'disabled' */ }
 boost.exitPiP()
 ```
 `VideoPiPController.onEvent` で `enter/leave` を受けてボタンの選択状態を更新する。
+
+### 1-4. PiPのON/OFF設定 (バックグラウンド再生のみ運用)
+`BoostSettings` がUserDefaults永続化済み。設定画面のトグルと配線するだけ:
+```swift
+// 読み込み→反映 (WKEngineSession生成時など、attach(to:)の前に)
+BoostSettings.load().apply(to: boost)
+// 保存 (トグル変更時。次に開くタブから反映。既存タブのenterPiPは即無効化)
+var s = BoostSettings.load(); s.pipEnabled = toggle.isOn; s.save().apply(to: boost)
+```
+キー: `wvb.pip.enabled` / `wvb.backgroundAudio.enabled` / `wvb.adblock.enabled`。
+PiP OFFでもバックグラウンド再生・広告ブロックは動き続ける。
 
 ## 2. 広告ブロック強化 (uBOL内包)
 

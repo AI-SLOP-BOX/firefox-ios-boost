@@ -8,7 +8,8 @@ YouTube用の **PiPボタン＋バックグラウンド再生維持** 拡張機�
 - 動画ページにフローティング「PiP」ボタン (タップ一発でPiP。Safari標準API→失敗時webkit方式)
 - ポップアップから「今の動画をPiPにする」
 - バックグラウンド維持: `document.hidden`偽装＋背景突入時の自動`pause()`抑止 (ページ世界ガード)
-- 設定トグル (PiPボタン表示 / バックグラウンド維持) は`chrome.storage.sync`で同期
+- 設定トグル (PiP機能マスター / PiPボタン表示 / バックグラウンド維持 / 裏で自動PiP) は`chrome.storage.sync`で同期。
+  PiPマスターOFFでバックグラウンド再生のみの運用になる
 
 ## 構成
 

@@ -81,10 +81,12 @@ public final class WebVideoBoost {
     // MARK: - Convenience
 
     public func enterPiP(completion: ((Any?) -> Void)? = nil) {
+        guard enablePiP else { completion?("disabled"); return }
         pip.enterPiP(completion: completion)
     }
 
     public func exitPiP(completion: ((Any?) -> Void)? = nil) {
+        guard enablePiP else { completion?("disabled"); return }
         pip.exitPiP(completion: completion)
     }
 }

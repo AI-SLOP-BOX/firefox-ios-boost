@@ -59,4 +59,26 @@ final class WebVideoBoostTests: XCTestCase {
         XCTAssertTrue(s.contains("autoPictureInPicture"))
         XCTAssertTrue(s.contains("enterpictureinpicture"))
     }
+
+    func testBoostSettingsRoundTrip() {
+        let defaults = UserDefaults(suiteName: "WebVideoBoostTests")!
+        defaults.removePersistentDomain(forName: "WebVideoBoostTests")
+        // 初回は全true
+        XCTAssertTrue(BoostSettings.load(from: defaults).pipEnabled)
+        // PiP OFF → 保存 → 反映
+        var s = BoostSettings.load(from: defaults)
+        s.pipEnabled = false
+        s.save(to: defaults)
+        XCTAssertFalse(BoostSettings.load(from: defaults).pipEnabled)
+        let boost = WebVideoBoost()
+        boost.autoPiPOnBackground = true
+        BoostSettings.load(from: defaults).apply(to: boost)
+        XCTAssertFalse(boost.enablePiP)
+        XCTAssertFalse(boost.autoPiPOnBackground)
+        XCTAssertTrue(boost.enableBackgroundAudio)
+        // 後片付け
+        var back = BoostSettings.load(from: defaults)
+        back.pipEnabled = true
+        back.save(to: defaults)
+    }
 }

@@ -10,7 +10,7 @@
   if (window.__ytbBoostInstalled) { return; }
   window.__ytbBoostInstalled = true;
 
-  var settings = { pipButton: true, bgGuard: true, autoPip: true };
+  var settings = { pipEnabled: true, pipButton: true, bgGuard: true, autoPip: true };
   try {
     if (chrome && chrome.storage && chrome.storage.sync) {
       chrome.storage.sync.get(settings, function (items) {
@@ -58,7 +58,7 @@
   // iOSの「設定 > 一般 > ピクチャインピクチャ > 自動で開始」ONだと、OS側の自動PiPも効く。
   var autoTriedForHide = false;
   function tryAutoPip() {
-    if (!settings.autoPip || autoTriedForHide) { return; }
+    if (!settings.pipEnabled || !settings.autoPip || autoTriedForHide) { return; }
     autoTriedForHide = true;
     setTimeout(function () { autoTriedForHide = false; }, 5000);
     var v = pickBestVideo();
@@ -78,7 +78,7 @@
   try {
     if ('mediaSession' in navigator) {
       navigator.mediaSession.setActionHandler('enterpictureinpicture', function () {
-        enterPiP();
+        if (settings.pipEnabled) { enterPiP(); }
       });
     }
   } catch (e) {}
@@ -112,6 +112,7 @@
   }
 
   function enterPiP() {
+    if (!settings.pipEnabled) { return 'disabled'; }
     var v = pickBestVideo();
     if (!v) { return 'no-video'; }
     hookVideo(v);
@@ -142,7 +143,7 @@
   // --- フローティングPiPボタン ---
   var BTN_ID = '__ytb_pip_btn';
   function ensureButton() {
-    if (!settings.pipButton) { removeButton(); return; }
+    if (!settings.pipEnabled || !settings.pipButton) { removeButton(); return; }
     if (document.getElementById(BTN_ID)) { return; }
     var host = document.querySelector('#movie_player, #player, ytd-watch-flexy, body');
     if (!host && !document.body) { return; }
