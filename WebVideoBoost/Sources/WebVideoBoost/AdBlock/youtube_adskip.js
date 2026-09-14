@@ -1,97 +1,121 @@
-/* WebVideoBoost / YouTube ad-skip
- * YouTubeの動画内広告 (プレロール/ミッドロール) を自動スキップ/早送りする。
- * - スキップボタン出現 (.ytp-skip-ad-button, .ytp-ad-skip-button) → 自動クリック
- * - スキップ不可広告 → videoをミュート+16x倍速+末尾シークで最速消化
- * - 広告表示中は .ad-showing 検出で再生速度を上げ、終了後に復元
- * 注意: YouTubeのDOMは頻繁に変わるため、セレクタは広めに持つ。
- *       純粋なDOM操作のみで、YouTubeの利用規約・広告ポリシーとの関係は各自確認のこと。
+/* WebVideoBoost / YouTube ad-skip (省メモリ版)
+ * - YouTube系ドメイン以外では即return (他サイトのCPU/メモリを使わない)
+ * - 旧500ms setInterval常駐を廃止: MutationObserver駆動 + 2秒フォールバック
+ * - 広告なしが続けば監視を間引き・停止 (アイドル時はゼロコスト)
  */
 (function () {
   'use strict';
   if (window.__wvbYtSkipInstalled) { return; }
   window.__wvbYtSkipInstalled = true;
 
-  var SKIP_SELECTORS = [
-    '.ytp-skip-ad-button',
-    '.ytp-ad-skip-button',
-    '.ytp-ad-skip-button-modern',
-    'button.ytp-ad-skip-button',
-    '.ytp-ad-overlay-close-button'
-  ];
-  var AD_PLAYER_SELECTORS = ['.ad-showing', '.ytp-ad-player-overlay'];
+  try {
+    var host = location.hostname || '';
+    if (host.indexOf('youtube.com') === -1 && host.indexOf('youtu.be') === -1 &&
+        host.indexOf('youtube-nocookie.com') === -1) { return; }
+  } catch (e) { return; }
+
+  var SKIP_SELECTORS = '.ytp-skip-ad-button,.ytp-ad-skip-button,.ytp-ad-skip-button-modern,.ytp-ad-overlay-close-button';
+  var FALLBACK_INTERVAL = 2000;   // 旧500ms→2000ms
+  var MAX_IDLE_ROUNDS = 30;       // 約60秒広告なしでフォールバック停止
+  var OBSERVE_TIMEOUT = 10 * 60 * 1000; // 10分で監視全体を停止
 
   var savedRate = 1;
   var savedMuted = false;
+  var idleRounds = 0;
+  var stopped = false;
+  var observer = null;
+  var timer = null;
 
   function clickSkip() {
-    for (var i = 0; i < SKIP_SELECTORS.length; i++) {
-      try {
-        var btns = document.querySelectorAll(SKIP_SELECTORS[i]);
-        for (var j = 0; j < btns.length; j++) {
-          var b = btns[j];
+    var clicked = false;
+    try {
+      var btns = document.querySelectorAll(SKIP_SELECTORS);
+      for (var i = 0; i < btns.length; i++) {
+        var b = btns[i];
+        try {
           var r = b.getBoundingClientRect ? b.getBoundingClientRect() : null;
-          if (r && r.width > 0 && r.height > 0) {
-            try { b.click(); return true; } catch (e) {}
-          }
-        }
-      } catch (e) {}
-    }
-    return false;
+          if (r && r.width > 0 && r.height > 0) { b.click(); clicked = true; }
+        } catch (e) {}
+      }
+    } catch (e) {}
+    return clicked;
   }
 
   function isAdShowing() {
     try {
-      for (var i = 0; i < AD_PLAYER_SELECTORS.length; i++) {
-        if (document.querySelector(AD_PLAYER_SELECTORS[i])) { return true; }
-      }
-      var v = document.querySelector('video.html5-main-video');
-      if (v && v.src && v.src.indexOf('googlevideo.com') === -1 && document.querySelector('.ytp-ad-module')) {
-        // 保守的判定: ad moduleが可視なら広告扱い
-        var m = document.querySelector('.ytp-ad-module');
-        if (m && m.getBoundingClientRect && m.getBoundingClientRect().height > 0) { return true; }
-      }
+      if (document.querySelector('.ad-showing')) { return true; }
     } catch (e) {}
     return false;
   }
 
-  function fastForward(video) {
+  function videos() {
+    try { return document.querySelectorAll('video'); } catch (e) { return []; }
+  }
+
+  function fastForward(v) {
     try {
-      if (!video.__wvbAdFF) {
-        video.__wvbAdFF = true;
-        savedRate = video.playbackRate || 1;
-        savedMuted = video.muted;
-        video.muted = true;
-        try { video.playbackRate = 16; } catch (e) {}
+      if (!v.__wvbAdFF) {
+        v.__wvbAdFF = true;
+        savedRate = v.playbackRate || 1;
+        savedMuted = v.muted;
+        v.muted = true;
+        try { v.playbackRate = 16; } catch (e) {}
       }
-      // 終了間際まで飛ばす (YouTubeはdurationが広告長になる)
-      if (isFinite(video.duration) && video.duration > 0 && isFinite(video.currentTime)) {
-        var target = Math.max(0, video.duration - 0.2);
-        if (target - video.currentTime > 0.5) {
-          try { video.currentTime = target; } catch (e) {}
+      if (isFinite(v.duration) && v.duration > 0 && isFinite(v.currentTime)) {
+        var target = Math.max(0, v.duration - 0.2);
+        if (target - v.currentTime > 0.5) {
+          try { v.currentTime = target; } catch (e) {}
         }
       }
     } catch (e) {}
   }
 
-  function restore(video) {
+  function restore(v) {
     try {
-      if (video.__wvbAdFF) {
-        video.__wvbAdFF = false;
-        try { video.playbackRate = savedRate || 1; } catch (e) {}
-        video.muted = savedMuted;
+      if (v.__wvbAdFF) {
+        v.__wvbAdFF = false;
+        try { v.playbackRate = savedRate || 1; } catch (e) {}
+        v.muted = savedMuted;
       }
     } catch (e) {}
   }
 
-  setInterval(function () {
+  function pass() {
+    if (stopped) { return; }
+    var didWork = false;
     try {
-      if (clickSkip()) { return; }
-      var videos = document.querySelectorAll('video');
-      for (var i = 0; i < videos.length; i++) {
-        var v = videos[i];
-        if (isAdShowing()) { fastForward(v); }
-        else { restore(v); }
+      if (clickSkip()) { didWork = true; }
+      var vs = videos();
+      var ad = isAdShowing();
+      for (var i = 0; i < vs.length; i++) {
+        if (ad) { fastForward(vs[i]); didWork = true; }
+        else { restore(vs[i]); }
       }
     } catch (e) {}
-  }, 500);
+    if (didWork) { idleRounds = 0; }
+    else {
+      idleRounds++;
+      if (idleRounds >= MAX_IDLE_ROUNDS) { shutdown(); }
+    }
+  }
+
+  function shutdown() {
+    stopped = true;
+    try { if (observer) { observer.disconnect(); } } catch (e) {}
+    try { if (timer) { clearInterval(timer); } } catch (e) {}
+    observer = null; timer = null;
+  }
+
+  var throttle = false;
+  try {
+    observer = new MutationObserver(function () {
+      if (throttle || stopped) { return; }
+      throttle = true;
+      setTimeout(function () { throttle = false; pass(); }, 500);
+    });
+    observer.observe(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ['class'] });
+  } catch (e) { observer = null; }
+  timer = setInterval(pass, FALLBACK_INTERVAL);
+  setTimeout(shutdown, OBSERVE_TIMEOUT);
+  pass();
 })();

@@ -66,6 +66,9 @@ public final class WebVideoBoost {
         background.beginBackgroundGuard()
     }
 
+    /// 再生中かどうか。タブ解放 (`offloadBackgroundWebViews` 等) から外す判定に使う。
+    public var isPlaying: Bool { background.isPlaying }
+
     // MARK: - Convenience
 
     public func enterPiP(completion: ((Any?) -> Void)? = nil) {

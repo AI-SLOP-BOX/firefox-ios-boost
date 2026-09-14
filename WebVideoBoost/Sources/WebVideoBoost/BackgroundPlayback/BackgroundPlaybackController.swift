@@ -22,6 +22,10 @@ public final class BackgroundPlaybackController: NSObject {
     public var nowPlayingTitle: String?
     public var nowPlayingArtist: String?
 
+    /// 現在再生中かどうか (JS側のplay/pauseイベントで更新)。
+    /// MemorySaverやTabManagerのoffload判定 (`protected`) に使う。
+    public private(set) var isPlaying = false
+
     private var installed = false
 
     public init(webView: WKWebView? = nil) {
@@ -77,6 +81,7 @@ public final class BackgroundPlaybackController: NSObject {
     /// - Parameter guardSeconds: ガードする秒数 (既定2.0秒)。長すぎるとユーザーの明示pauseも効かなくなる。
     public func beginBackgroundGuard(guardSeconds: Double = 2.0) {
         webView?.evaluateJavaScript("window.__wvbBgGuard = true;", completionHandler: nil)
+        isPlaying = true
         updateNowPlaying(isPlaying: true)
         DispatchQueue.main.asyncAfter(deadline: .now() + guardSeconds) { [weak self] in
             self?.webView?.evaluateJavaScript("window.__wvbBgGuard = false;", completionHandler: nil)
@@ -86,6 +91,7 @@ public final class BackgroundPlaybackController: NSObject {
     /// ユーザーが明示的に停止した場合は次1回のpauseだけ通す (ガードで捨てない)。
     public func allowNextPauseOnce() {
         webView?.evaluateJavaScript("window.__wvbAllowPauseOnce = true;", completionHandler: nil)
+        isPlaying = false
         updateNowPlaying(isPlaying: false)
     }
 
@@ -157,8 +163,8 @@ extension BackgroundPlaybackController: WKScriptMessageHandler {
         guard message.name == Self.messageHandlerName else { return }
         var type = "event"
         if let body = message.body as? [String: Any], let t = body["type"] as? String { type = t }
-        if type == "play" { updateNowPlaying(isPlaying: true) }
-        if type == "pause" || type == "ended" { updateNowPlaying(isPlaying: false) }
+        if type == "play" { isPlaying = true; updateNowPlaying(isPlaying: true) }
+        if type == "pause" || type == "ended" { isPlaying = false; updateNowPlaying(isPlaying: false) }
         onEvent?(type)
     }
 }

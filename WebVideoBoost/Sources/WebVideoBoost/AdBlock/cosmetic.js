@@ -1,10 +1,11 @@
-/* WebVideoBoost / AdBlock cosmetic
- * WebKit content-blocker (block系) で取りこぼす「ページ内広告枠」を隠す。
- * uBOの cosmetic フィルタ (##.ad-banner 等) のうち、WebKitの
- * css-display-none に変換できなかった分 + 動的生成枠をMutationObserverで追う。
+/* WebVideoBoost / AdBlock cosmetic (省メモリ版)
+ * 原則: 非表示化はネイティブの css-display-none ルール (生成JSON内) が担当し、
+ * 本JSは「遅延生成された広告枠の掃除」の補助のみ。
+ * - <style>1枚を先入れ (CSS側で処理される分はJSヒープを使わない)
+ * - MutationObserverは最大SWEEP_BUDGET回で自動切断 (常駐しない)
+ * - 非表示タブではsweepをスキップ (バックグラウンド再生中のCPU浪費を防ぐ)
  * Tools/ublock_to_webkit.py が uAssets から selectors.json を吐き、
  * 本スクリプトの __WVB_COSMETIC_SELECTORS に埋め込む運用を想定。
- * デフォルトは主要な汎用セレクタのみ内包 (単体でも動作)。
  */
 (function () {
   'use strict';
@@ -19,24 +20,31 @@
     '.video-ads', '.ytp-ad-module', '.ytp-ad-overlay-container'
   ]);
 
-  var STYLE_ID = '__wvb_cosmetic_style';
+  var SWEEP_BUDGET = 30;      // これ以上変化がなければ監視を切断
+  var SWEEP_INTERVAL = 1000;  // 旧300ms→1000ms (CPU/メモリ削減)
+  var IDLE_CUTOFF = 5;        // 連続で変化ゼロなら早期切断
+
+  var sweepsLeft = SWEEP_BUDGET;
+  var idleStreak = 0;
+  var observer = null;
+  var joined = null;
+  try { joined = SELECTORS.join(','); } catch (e) { return; }
+
   function ensureStyle() {
-    var el = document.getElementById(STYLE_ID);
-    if (el) { return el; }
-    el = document.createElement('style');
-    el.id = STYLE_ID;
-    try {
-      el.textContent = SELECTORS.join(',') + '{display:none!important;}';
-    } catch (e) {}
+    if (document.getElementById('__wvb_cosmetic_style')) { return; }
+    var el = document.createElement('style');
+    el.id = '__wvb_cosmetic_style';
+    try { el.textContent = joined + '{display:none!important;}'; } catch (e) { return; }
     var root = document.head || document.documentElement;
     if (root) { root.appendChild(el); }
-    return el;
   }
 
-  function sweep(root) {
+  function sweep() {
+    // 非表示タブでは何もしない (CSSは効き続ける)
+    try { if (document.hidden) { return 0; } } catch (e) {}
     var changed = 0;
     try {
-      var nodes = (root || document).querySelectorAll(SELECTORS.join(','));
+      var nodes = document.querySelectorAll(joined);
       for (var i = 0; i < nodes.length; i++) {
         var n = nodes[i];
         if (n && n.style && n.style.display !== 'none') {
@@ -44,18 +52,39 @@
           changed++;
         }
       }
-    } catch (e) {}
+    } catch (e) { return 0; }
     return changed;
   }
 
+  function disconnect() {
+    try { if (observer) { observer.disconnect(); } } catch (e) {}
+    observer = null;
+  }
+
+  function onMutated() {
+    if (sweepsLeft <= 0) { disconnect(); return; }
+    sweepsLeft--;
+    var changed = sweep();
+    if (changed === 0) {
+      idleStreak++;
+      if (idleStreak >= IDLE_CUTOFF) { disconnect(); return; }
+    } else {
+      idleStreak = 0;
+    }
+    if (sweepsLeft <= 0) { disconnect(); }
+  }
+
   ensureStyle();
-  sweep(document);
+  sweep();
   var throttle = false;
   try {
-    new MutationObserver(function () {
-      if (throttle) { return; }
+    observer = new MutationObserver(function () {
+      if (throttle || sweepsLeft <= 0) { return; }
       throttle = true;
-      setTimeout(function () { throttle = false; sweep(document); }, 300);
-    }).observe(document.documentElement, { childList: true, subtree: true });
+      setTimeout(function () { throttle = false; onMutated(); }, SWEEP_INTERVAL);
+    });
+    observer.observe(document.documentElement, { childList: true, subtree: true });
+    // 安全弁: 60秒で必ず切断 (ページ滞在が長くても常駐しない)
+    setTimeout(disconnect, 60000);
   } catch (e) {}
 })();

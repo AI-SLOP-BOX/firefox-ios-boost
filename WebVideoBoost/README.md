@@ -10,6 +10,7 @@ WebVideoBoost/
   Package.swift                        # SwiftPM (iOS15+, 依存なし: WebKit/AVFoundation/MediaPlayerのみ)
   Sources/WebVideoBoost/
     Shared/WebVideoBoost.swift         # Facade。まずここを読む
+    Shared/MemorySaver.swift            # 省メモリ (非選択タブ停止・再生タブ保護)
     VideoPiP/VideoPiPController.swift + video_pip.js
     BackgroundPlayback/BackgroundPlaybackController.swift + background_playback.js
     AdBlock/UBOLContentBlocker.swift + cosmetic.js + youtube_adskip.js
@@ -47,11 +48,35 @@ boost.enterPiP()
 
 ```bash
 cd WebVideoBoost/Tools
-./update_ubol_lists.sh ../Sources/WebVideoBoost/AdBlock/Lists
+./update_ubol_lists.sh ../Sources/WebVideoBoost/AdBlock/Lists          # フル版
+python3 ublock_to_webkit.py --out ../Sources/WebVideoBoost/AdBlock/ListsLite --lite  # 軽量版 (~1/3)
 # 生成物: wvb-ubo-part-N.json + cosmetic_selectors.json をアプリバンドルに追加
 ```
 
 変換方針は `Tools/ublock_to_webkit.py` 冒頭コメント参照 (表現できない高度記法はスキップして誤ブロックを防ぐ)。
+
+## 省メモリ設計 (なぜ軽いか)
+
+- **遮断はネイティブ側**: `WKContentRuleList` (WebKit内部処理) でJSヒープを使わない。
+  要素非表示も `css-display-none` をJSONに埋め込み、JSの常駐監視に頼らない。
+- **JSは自己停止**: `cosmetic.js` は最大30回・60秒で監視切断、非表示タブでは何もしない。
+  `youtube_adskip.js` はYouTube以外即return、広告なし約60秒で停止。
+- **タブ管理**: `MemorySaver.suspendInactive` で非選択タブのメディア停止+ロード中断。
+  再生中タブは `BackgroundPlaybackController.isPlaying` で保護する。
+  Firefox本体の `TabManagerImplementation.offloadBackgroundWebViews` (メモリ警告時に
+  背景タブのWebViewを解放) と併用し、再生タブだけ除外するのが推奨。
+
+## バックグラウンド再生 (できる)
+
+実装済み。条件は4点セット:
+
+1. `Info.plist UIBackgroundModes=audio` (firefox-iosは既存)
+2. `BackgroundPlaybackController().activateSession()` を起動時に1回
+3. WebViewを破棄しない (Firefoxのセッションはdetachのみで適合)
+4. `boost.didEnterBackground()` をbackground突入時に呼ぶ
+
+ロック画面コントロール (`MPRemoteCommandCenter`/NowPlaying) 付き。
+再生中は `boost.isPlaying` がtrueになり、MemorySaver/offloadの保護対象になる。
 
 ## 注意 (審査・ポリシー)
 

@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
-"""uBO/EasyList -> WebKit content-blocker JSON 変換ツール。
+"""uBO/EasyList -> WebKit content-blocker JSON 変換ツール (省メモリ版)。
 
 使い方:
-    python3 ublock_to_webkit.py --out ./lists --max-per-file 50000
-    python3 ublock_to_webkit.py --out ./lists --offline  # Tools/lists/*.txt を変換のみ
+    python3 ublock_to_webkit.py --out ./lists --max-per-file 45000
+    python3 ublock_to_webkit.py --out ./lists --lite          # 軽量版 (~15k rules)
+    python3 ublock_to_webkit.py --out ./lists --offline      # Tools/lists/*.txt を変換のみ
 
-入力 (既定):
+入力 (フル既定):
     - https://easylist.to/easylist/easylist.txt
     - https://easylist.to/easylist/easyprivacy.txt
     - https://pgl.yoyo.org/adservers/serverlist.php?hostformat=hosts&showintro=0&mimetype=plaintext
@@ -14,18 +15,22 @@
     - https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/privacy.txt
     - https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/unbreak.txt (例外用)
 
+入力 (--lite: 体感ブロック率を保ちつつルール数を約1/3に):
+    - easylist.txt + Peter Lowe + uAssets filters.txt のみ
+    (easyprivacy/badware/privacyは外す。メモリ最優先の端末向け)
+
 出力:
     <out>/wvb-ubo-part-N.json   (WebKit content-blocker形式の配列)
     <out>/cosmetic_selectors.json (## フィルタから抽出したセレクタ配列。cosmetic.jsに埋め込む用)
 
-方針 (安全側に倒す):
-    - 表現できない高度な記法はスキップ (広げて誤ブロックしない)
-      scriptlet(##+js), HTMLフィルタ(##^), procedural(:has(, :has-text(, :xpath(), redirect=, csp=,
-      removeparam=, denyallow=, entityマッチ(*), 正規表現ドメイン等)
-    - ネットワーク基本形のみ変換:
+省メモリ方針:
+    - CSS要素非表示は JS MutationObserver ではなく WebKitネイティブの
+      css-display-none ルールとしてJSONに直接埋め込む (--emit-css-rules, 既定ON, 上限あり)。
+      ネイティブ側で処理されるためJSヒープ・CPUを使わない。
+    - ネットワーク基本形のみ変換 (以下略):
         ||example.com^            -> block
         @@||example.com^          -> ignore-previous-rules
-        ##.ad-banner              -> css-display-none (selectorsへ)
+        ##.ad-banner              -> css-display-none (JSON内 + selectorsへ)
         ||ads.com^$third-party    -> load-type:third-party
         ||x.com^$script,image     -> resource-type
         ||x.com^$domain=a.com|b.c -> if-domain / unless-domain (肯定のみ対応)
@@ -47,6 +52,17 @@ DEFAULT_URLS = [
     "https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/privacy.txt",
     "https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/unbreak.txt",
 ]
+
+LITE_URLS = [
+    "https://easylist.to/easylist/easylist.txt",
+    "https://pgl.yoyo.org/adservers/serverlist.php?hostformat=hosts&showintro=0&mimetype=plaintext",
+    "https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/filters.txt",
+    "https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/unbreak.txt",
+]
+
+# css-display-none としてJSONに埋め込むセレクタ数上限。
+# WebKitの50k/リスト制限を圧迫しないよう既定1500。残りはcosmetic.js側で処理。
+DEFAULT_MAX_CSS_RULES = 1500
 
 RESOURCE_MAP = {
     "script": "script",
@@ -349,12 +365,31 @@ def convert_lines(lines: list[str]) -> tuple[list[dict], list[str]]:
     return network_rules, uniq_sel
 
 
+def build_css_rules(selectors: list[str], limit: int) -> list[dict]:
+    """汎用cosmeticセレクタをWebKitネイティブの css-display-none ルールに変換。
+
+    JSのMutationObserverよりメモリ/CPUが大幅に軽い (WebKit内部処理のためJSヒープ不使用)。
+    triggerは全ページ対象の `.*` 固定。順序依存がないためblock群の後に配置する。
+    """
+    rules: list[dict] = []
+    for sel in selectors[:limit]:
+        rules.append({
+            "action": {"type": "css-display-none", "selector": sel},
+            "trigger": {"url-filter": ".*"},
+        })
+    return rules
+
+
 def write_parts(network_rules: list[dict], out_dir: str, max_per_file: int) -> list[str]:
     os.makedirs(out_dir, exist_ok=True)
-    # 例外ルール(ignore-previous-rules)は対応するblockより後に置く必要があるためソート
-    blocks = [r for r in network_rules if r["action"]["type"] != "ignore-previous-rules"]
+    # 例外ルール(ignore-previous-rules)は対応するblockより後に置く必要があるためソート。
+    # css-display-noneは順序非依存だがblock群の後にまとめる。
+    blocks = [r for r in network_rules if r["action"]["type"] == "block"]
+    css = [r for r in network_rules if r["action"]["type"] == "css-display-none"]
     ignores = [r for r in network_rules if r["action"]["type"] == "ignore-previous-rules"]
-    ordered = blocks + ignores
+    others = [r for r in network_rules
+              if r["action"]["type"] not in ("block", "css-display-none", "ignore-previous-rules")]
+    ordered = blocks + css + others + ignores
     paths: list[str] = []
     for i in range(0, len(ordered), max_per_file):
         chunk = ordered[i:i + max_per_file]
@@ -369,7 +404,17 @@ def write_parts(network_rules: list[dict], out_dir: str, max_per_file: int) -> l
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", required=True, help="出力ディレクトリ")
-    ap.add_argument("--max-per-file", type=int, default=50000)
+    ap.add_argument("--max-per-file", type=int, default=45000)
+    ap.add_argument("--lite", action="store_true",
+                    help="軽量版 (EasyList+Peter Lowe+uAssets filtersのみ。約1/3のルール数)")
+    ap.add_argument("--max-selectors", type=int, default=3000,
+                    help="cosmetic_selectors.jsonに残す上限 (既定3000)")
+    ap.add_argument("--emit-css-rules", dest="emit_css", action="store_true", default=True,
+                    help="css-display-noneをJSONに埋め込む (既定ON)")
+    ap.add_argument("--no-css-rules", dest="emit_css", action="store_false",
+                    help="css-display-none埋め込みを無効化")
+    ap.add_argument("--max-css-rules", type=int, default=DEFAULT_MAX_CSS_RULES,
+                    help=f"JSONに埋め込むCSS上限 (既定{DEFAULT_MAX_CSS_RULES})")
     ap.add_argument("--offline", action="store_true", help="Tools/lists/*.txt から読む")
     ap.add_argument("inputs", nargs="*", help="追加のフィルタファイル")
     args = ap.parse_args()
@@ -389,7 +434,8 @@ def main() -> int:
             print("no offline lists found. put files into Tools/lists/", file=sys.stderr)
             return 2
     else:
-        lines = fetch_all(DEFAULT_URLS)
+        urls = LITE_URLS if args.lite else DEFAULT_URLS
+        lines = fetch_all(urls)
         for extra in args.inputs:
             with open(extra, encoding="utf-8", errors="replace") as f:
                 lines.extend(f.read().splitlines())
@@ -398,10 +444,18 @@ def main() -> int:
     network_rules, selectors = convert_lines(lines)
     print(f"network rules: {len(network_rules)}, cosmetic selectors: {len(selectors)}", file=sys.stderr)
 
+    css_count = 0
+    if args.emit_css and selectors:
+        css_rules = build_css_rules(selectors, args.max_css_rules)
+        network_rules = network_rules + css_rules
+        css_count = len(css_rules)
+
     paths = write_parts(network_rules, args.out, args.max_per_file)
     with open(os.path.join(args.out, "cosmetic_selectors.json"), "w", encoding="utf-8") as f:
-        json.dump(selectors[:3000], f, ensure_ascii=False, indent=1)
-    print(f"done: {len(paths)} parts", file=sys.stderr)
+        json.dump(selectors[:args.max_selectors], f, ensure_ascii=False, indent=1)
+    total_bytes = sum(os.path.getsize(p) for p in paths)
+    print(f"done: {len(paths)} parts, css rules: {css_count}, "
+          f"total JSON: {total_bytes // 1024} KB", file=sys.stderr)
     return 0
 
 

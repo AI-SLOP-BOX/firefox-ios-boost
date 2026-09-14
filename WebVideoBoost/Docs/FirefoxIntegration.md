@@ -135,7 +135,40 @@ BackgroundPlaybackController().activateSession()
 `firefox-ios/Client/Info.plist` の `UIBackgroundModes` に `audio` が残っていること。
 無いと問答無用で止まる。審査時は「ブラウザのメディア継続」として正当性を説明する。
 
-## 4. 動作確認チェックリスト
+## 4. 省メモリ運用 (ブラウザ全体が重い場合)
+
+メモリ食いの主犯は (1)広告・トラッカーのJS/画像、(2)複数タブのWKWebView常駐。
+対策は3層:
+
+### 4-1. 軽量リストを使う (`--lite`)
+```bash
+python3 Tools/ublock_to_webkit.py --out <ListsLite> --lite
+```
+EasyList+Peter Lowe+uAssets filtersのみで約1/3のルール数。
+体感ブロック率は維持しつつ、コンパイル時間・常駐メモリが減る。
+低メモリ端末向けビルドはLiteを既定にするのが推奨。
+
+### 4-2. 再生タブをoffloadから除外する
+`TabManagerImplementation.offloadBackgroundWebViews` (`TabManagerImplementation.swift:1170-1185`) は
+メモリ警告時に背景タブのWebViewを解放する。再生中タブを巻き込むと音が止まるため除外する:
+
+```swift
+// offloadBackgroundWebViews 内のフィルタに追加
+let playingTabs = Set(tabs.filter { $0.webVideoBoost?.isPlaying == true }.map { $0 })
+let backgroundTabsWithWebViews = tabs.filter {
+    $0.webView != nil && $0 !== selectedTab && !playingTabs.contains($0)
+}
+```
+
+タブ切替時には `MemorySaver.suspendInactive(allWebViews, active: current, protected: playingWebViews)`
+を呼ぶ (メディア停止+ロード中断。WebView破棄より復帰が速い)。
+
+### 4-3. 計測
+- Xcode: Debug Navigator → Memory でタブ数 vs フットプリントを確認
+- 目安: 広告ブロック有効で画像・iframe広告ページの常駐が大幅減 (重いページほど効果大)
+- `MemorySaver.clearDiskCachesOlderThan()` はCookieを消さずキャッシュのみ掃除
+
+## 5. 動作確認チェックリスト
 
 - [ ] Safari同等ページで `<video>` 再生 → `boost.enterPiP()` でフローティング表示
 - [ ] YouTube (m.youtube.com) で再生 → PiPボタン/JSの両経路でPiP
@@ -144,7 +177,7 @@ BackgroundPlaybackController().activateSession()
 - [ ] ホーム画面移行・画面ロック後も音声継続、ロック画面に再生コントロール表示
 - [ ] ETP Strict/Standard切替後もuBOLルールが残る (2-2の回帰確認)
 
-## 5. 他ブラウザへの転用
+## 6. 他ブラウザへの転用
 
 - `WebVideoBoost/` をそのままSwiftPM参照するだけ。呼び出しはREADMEの3行。
 - リスト生成物 (`wvb-ubo-part-*.json`) はバンドル配置のみで流用可。
