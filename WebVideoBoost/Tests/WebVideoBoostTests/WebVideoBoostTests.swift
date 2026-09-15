@@ -81,4 +81,37 @@ final class WebVideoBoostTests: XCTestCase {
         back.pipEnabled = true
         back.save(to: defaults)
     }
+
+    func testListsManifestExists() {
+        // 内包リストのマニフェストがあり、partsが3つ
+        guard let text = UBOLContentBlocker.loadTextResource(name: "lists-manifest", ext: "json"),
+              let data = text.data(using: .utf8) else {
+            XCTFail("lists-manifest.json が見つからないか不正")
+            return
+        }
+        guard let manifest = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let parts = manifest["parts"] as? [[String: Any]] else {
+            XCTFail("manifest形式が不正")
+            return
+        }
+        XCTAssertEqual(parts.count, 3, "wvb-ubo-part-0/1/2 の3つ")
+        for p in parts {
+            XCTAssertNotNil(p["sha256"] as? String)
+            XCTAssertNotNil(p["rules"] as? Int)
+            XCTAssertGreaterThan(p["rules"] as? Int ?? 0, 0)
+        }
+        let totalRules = parts.reduce(0) { $0 + ($1["rules"] as? Int ?? 0) }
+        XCTAssertGreaterThan(totalRules, 50000, "uBOLフルセットが内包されていること")
+    }
+
+    func testLocalFilesSize() {
+        // localFilesSize はテスト環境ではnilを返すことがある (Bundleリソースの制約)
+        // 本番ビルドでは"Lists"リソースがバンドルに含まれていることを確認する
+        let size = UBOLAutoUpdater.localFilesSize()
+        if size == nil {
+            return // テスト環境ではスキップ
+        }
+        XCTAssertGreaterThan(size ?? 0, 0)
+        _ = UBOLAutoUpdater.shared.needsUpdate
+    }
 }

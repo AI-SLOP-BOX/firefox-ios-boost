@@ -156,7 +156,6 @@ def convert_network_filter(line: str) -> dict | None:
     # オプション分割 ($ はURL中に現れうるが、uBOでは末尾$以降がオプション)
     options: list[str] = []
     if "$" in body:
-        # 最後の$をオプション区切りとみなす (URLに$を含む例は稀)
         idx = body.rfind("$")
         options = [o.strip() for o in body[idx + 1:].split(",") if o.strip()]
         body = body[:idx]
@@ -167,127 +166,29 @@ def convert_network_filter(line: str) -> dict | None:
         return None
     if "denyallow=" in opt_joined:
         return None
-    # domain/from に正規表現やワイルドカード混在はスキップ
     for o in options:
         if o.startswith(("domain=", "from=", "to=")) and ("/" in o or "*" in o):
             return None
 
-    # --- URL パターン -> url-filter正規表現 ---
-    url_filter: str | None = None
-    b = body
-    if b.startswith("||"):
-        host_part = b[2:]
-        # パス区切りまでをドメイン部とする
-        m = re.split(r"[\/\^\*\?]", host_part, maxsplit=1)
-        domain = m[0]
-        rest = host_part[len(domain):]
-        if not domain or "*" in domain or "/" in body[2:2+1:]:
-            return None
-        if "." not in domain and domain != "localhost":
-            return None
-        domain_re = escape_url_filter_literal(domain)
-        # ^ はセパレータ (末尾/クエリ/終端)。WebKit正規表現で近似
-        if rest.startswith("^"):
-            url_filter = f"^https?://([^/]+\\.)?{domain_re}([/:?#]|$)"
-        elif rest == "" or rest == "*":
-            url_filter = f"^https?://([^/]+\\.)?{domain_re}"
-        else:
-            # パス付き: 前方一致として扱う
-            path_re = escape_url_filter_literal(rest).replace("\\*", ".*")
-            url_filter = f"^https?://([^/]+\\.)?{domain_re}{path_re}"
-    elif b.startswith("|"):
-        # |http://... 先頭アンカー
-        lit = b.lstrip("|")
-        lit_re = escape_url_filter_literal(lit).replace("\\*", ".*")
-        url_filter = "^" + lit_re
-    elif b.startswith("/") and b.endswith("/") and len(b) > 2:
-        # 純正規表現はWebKitでも使えるが、暴発防止で長さ制限
-        inner = b[1:-1]
-        if len(inner) > 200 or "**" in inner:
-            return None
-        url_filter = inner
-    else:
-        # プレーン部分一致 (例: "ads.js", "/banner/")
-        if len(b) < 4 or len(b) > 150:
-            return None
-        if any(m in b for m in PROCEDURAL_MARKERS):
-            return None
-        url_filter = escape_url_filter_literal(b).replace("\\*", ".*")
-
-    trigger: dict = {"url-filter": url_filter}
-    action: dict
-
-    # --- オプション -> trigger ---
-    load_types: list[str] = []
-    resource_types: list[str] = []
-    if_domains: list[str] = []
-    unless_domains: list[str] = []
-
-    for o in options:
-        if o == "third-party" or o == "3p":
-            trigger["load-type"] = ["third-party"]
-        elif o == "first-party" or o == "1p":
-            trigger["load-type"] = ["first-party"]
-        elif o in RESOURCE_MAP:
-            mapped = RESOURCE_MAP[o]
-            if mapped is None:
-                return None  # 表現できない種別を含む -> スキップ
-            resource_types.append(mapped)
-        elif o.startswith("~"):
-            # 除外種別 (例: ~stylesheet) はWebKitにない -> 安全のためスキップ
-            base = o[1:]
-            if base in RESOURCE_MAP or base in ("third-party", "first-party", "3p", "1p"):
-                return None
-            # 不明な否定は無視して続行しない (厳しめ)
-            return None
-        elif o.startswith("domain="):
-            domains = o[len("domain="):].split("|")
-            for d in domains:
-                if not d:
-                    continue
-                if d.startswith("~"):
-                    unless_domains.append(d[1:])
-                else:
-                    if_domains.append(d)
-        elif o in ("", "empty"):
-            return None
-        elif o in ("important", "badfilter", "match-case"):
-            # importantはWebKitに優先度概念がないため無視 (blockとして扱う)
-            # badfilterは打ち消しだが、順序依存のため今回はスキップ扱いにしない (後段で除外も検討)
-            if o == "badfilter":
-                return None
-            continue
-        elif o.startswith(("script=", "all", "popup", "inline")):
-            return None
-        else:
-            # 未知オプションは安全側で無視ではなくスキップ
-            # ただしよくある無害なものは許容
-            if o not in ("generichide", "genericblock", "elemhide", "jsinject", "urlskip"):
-                return None
-
-    # third-partyとfirst-partyの両立不可
-    if "load-type" in trigger and not isinstance(trigger["load-type"], list):
-        pass
-    if resource_types:
-        # WebKitは resource-type 配列対応。document単独はmain-document扱いに注意
-        trigger["resource-type"] = sorted(set(resource_types))
-    if if_domains:
-        # ワイルドカード/正規表現が混ざっていたら上で弾いている
-        trigger["if-domain"] = if_domains
-    if unless_domains:
-        trigger["unless-domain"] = unless_domains
-
-    # 例外ルールは ignore-previous-rules
-    if is_exception:
-        # WebKitのignoreは同じurl-filterにマッチした直前ルールを無効化する。
-        # 変換後のfilterが広すぎると誤って無効化するため、||始まりのみ採用
-        if not body.startswith("||"):
-            return None
-        action = {"type": "ignore-previous-rules"}
-    else:
-        action = {"type": "block"}
-
-    return {"trigger": trigger, "action": action}
+    # ドメイン前置きブロックのみ変換 (||example.com^ 系)。
+    # 純正規表現や長大パスはWebKit (YARR) でコンパイルできず、
+    # 1件の不正でリスト全体が無効になるため完全に排除。
+    if not body.startswith("||"):
+        return None
+    host_part = body[2:]
+    if host_part.endswith("^"):
+        host_part = host_part[:-1]
+    # ドメインのみ (パスは捨てる)
+    domain = host_part.split("/", 1)[0].split("?", 1)[0]
+    if not domain or "*" in domain or "/" in body[2:]:
+        return None
+    if "." not in domain and domain != "localhost":
+        return None
+    if "^" in domain or "|" in domain or "$" in domain:
+        return None
+    domain_re = escape_url_filter_literal(domain)
+    action: dict = {"type": "ignore-previous-rules"} if is_exception else {"type": "block"}
+    return {"trigger": {"url-filter": f"^https?://([^/]+\\.)?{domain_re}"}, "action": action}
 
 
 def convert_cosmetic(line: str) -> str | None:
@@ -383,8 +284,6 @@ def build_css_rules(selectors: list[str], limit: int) -> list[dict]:
 
 def write_parts(network_rules: list[dict], out_dir: str, max_per_file: int) -> list[str]:
     os.makedirs(out_dir, exist_ok=True)
-    # 例外ルール(ignore-previous-rules)は対応するblockより後に置く必要があるためソート。
-    # css-display-noneは順序非依存だがblock群の後にまとめる。
     blocks = [r for r in network_rules if r["action"]["type"] == "block"]
     css = [r for r in network_rules if r["action"]["type"] == "css-display-none"]
     ignores = [r for r in network_rules if r["action"]["type"] == "ignore-previous-rules"]
@@ -454,7 +353,28 @@ def main() -> int:
     paths = write_parts(network_rules, args.out, args.max_per_file)
     with open(os.path.join(args.out, "cosmetic_selectors.json"), "w", encoding="utf-8") as f:
         json.dump(selectors[:args.max_selectors], f, ensure_ascii=False, indent=1)
-    total_bytes = sum(os.path.getsize(p) for p in paths)
+    # アプリ内自動更新用のマニフェスト (版・SHA256・件数)
+    import hashlib
+    import datetime
+    parts_info = []
+    for p in paths:
+        raw = open(p, "rb").read()
+        with open(p, encoding="utf-8") as f:
+            count = len(json.load(f))
+        parts_info.append({
+            "file": os.path.basename(p),
+            "sha256": hashlib.sha256(raw).hexdigest(),
+            "rules": count,
+            "bytes": len(raw),
+        })
+    manifest = {
+        "format": 1,
+        "built_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+        "parts": parts_info,
+    }
+    with open(os.path.join(args.out, "lists-manifest.json"), "w", encoding="utf-8") as f:
+        json.dump(manifest, f, ensure_ascii=False, indent=1)
+    total_bytes = sum(p["bytes"] for p in parts_info)
     print(f"done: {len(paths)} parts, css rules: {css_count}, "
           f"total JSON: {total_bytes // 1024} KB", file=sys.stderr)
     return 0

@@ -1,0 +1,24 @@
+{
+ "format": 1,
+ "built_at": "2026-09-14T11:10:34.571865+00:00",
+ "parts": [
+  {
+   "file": "wvb-ubo-part-0.json",
+   "sha256": "83404f1dba1461d07ad5d71e75cf9db9763726977cb0cec4455a016e79756cff",
+   "rules": 45000,
+   "bytes": 4367024
+  },
+  {
+   "file": "wvb-ubo-part-1.json",
+   "sha256": "f8f3bd9550ae2ac2cac854a72f587dfa7619decab724b0d6e40025afc2700855",
+   "rules": 45000,
+   "bytes": 4554300
+  },
+  {
+   "file": "wvb-ubo-part-2.json",
+   "sha256": "98a12e561acde5bab75e3aa47051693e4203b1737e6984f0d0ea9d2a24afe962",
+   "rules": 12242,
+   "bytes": 1215336
+  }
+ ]
+}
