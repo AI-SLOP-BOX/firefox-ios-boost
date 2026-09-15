@@ -1,0 +1,69 @@
+name: Update uBOL filter lists
+on:
+  schedule:
+    - cron: "0 3 */7 * *"   # 7日ごと 03:00 UTC
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+      - name: Fetch uBOL lists
+        run: |
+          pip install --quiet requests
+          python3 WebVideoBoost/Tools/ublock_to_webkit.py \
+            --out WebVideoBoost/FilterLists/raw \
+            --offline \
+            $(ls WebVideoBoost/FilterLists/*.txt | tr '\n' ' ')
+          # 既存のtxtを差し替え (名前を変えず同じパスに)
+          cp WebVideoBoost/FilterLists/raw/*.txt WebVideoBoost/FilterLists/
+          rm -rf WebVideoBoost/FilterLists/raw
+      - name: Rebuild WebKit blocklists
+        run: |
+          python3 WebVideoBoost/Tools/ublock_to_webkit.py \
+            --out WebVideoBoost/Sources/WebVideoBoost/AdBlock/Lists \
+            --max-per-file 45000 \
+            --offline \
+            $(ls WebVideoBoost/FilterLists/*.txt | tr '\n' ' ')
+      - name: Update FilterLists manifest
+        run: |
+          python3 - <<'EOF'
+          import json, os, datetime
+          out = "WebVideoBoost/FilterLists"
+          manifest = {"fetched_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            "sources": {fn: url for fn, url in []}}
+          # sourcesは手動で更新するか、ublock_to_webkit.pyのDEFAULT_URLSから反映
+          for fn in sorted(os.listdir(out)):
+              if not fn.endswith(".txt"): continue
+              p = os.path.join(out, fn)
+              h = __import__("hashlib").sha256(open(p, "rb").read()).hexdigest()
+              manifest["files"] = manifest.get("files", {})
+              manifest["files"][fn] = {"sha256": h,
+                "lines": sum(1 for _ in open(p)), "bytes": os.path.getsize(p)}
+          json.dump(manifest, open(os.path.join(out, "manifest.json"), "w"), indent=1)
+          print("manifest updated")
+          EOF
+      - name: Validate blocklists with WebKit
+        run: |
+          ls WebVideoBoost/Sources/WebVideoBoost/AdBlock/Lists/wvb-ubo-part-*.json | while read f; do
+            echo "checking $(basename $f)"
+          done
+          # macOS実機環境でのみvalidate_blocklists.swiftが実行可能。
+          # Linux CIではJSON構文チェックのみ行う。
+          ls WebVideoBoost/Sources/WebVideoBoost/AdBlock/Lists/wvb-ubo-part-*.json | while read f; do
+            python3 -c "import json; json.load(open('$f')); print('JSON OK $(basename $f)')"
+          done
+      - name: Commit & push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A WebVideoBoost/FilterLists WebVideoBoost/Sources/WebVideoBoost/AdBlock/Lists
+          git commit -m "chore: auto-update uBOL filter lists ($(date -u +%Y-%m-%d))"
+          git push
