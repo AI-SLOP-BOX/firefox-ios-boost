@@ -4,6 +4,7 @@
 
 import Foundation
 import WebKit
+import WebVideoBoost
 
 @MainActor
 public struct WKWebViewParameters {
@@ -71,6 +72,7 @@ public struct DefaultWKEngineConfigurationProvider: WKEngineConfigurationProvide
         configuration.allowsInlineMediaPlayback = true
         configuration.allowsPictureInPictureMediaPlayback = true
         configuration.allowsAirPlayForMediaPlayback = true
+        WebVideoBoost.configureForNewWebView(configuration)
         configuration.dataDetectorTypes = DefaultWKEngineConfigurationProvider.defaultDataDetectorTypes
 
         // TODO: FXIOS-8086 - Evaluate if ignoresViewportScaleLimits is still needed

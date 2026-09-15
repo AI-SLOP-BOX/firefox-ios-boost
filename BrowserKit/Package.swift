@@ -97,6 +97,7 @@ let package = Package(
         .package(
             url: "https://github.com/johnxnguyen/Down.git",
             exact: "0.11.0"),
+        .package(path: "../WebVideoBoost"),
     ],
     targets: [
         .target(
@@ -182,7 +183,8 @@ let package = Package(
         .target(
             name: "WebEngine",
             dependencies: ["Common",
-                           .product(name: "GCDWebServers", package: "GCDWebServer")],
+                           .product(name: "GCDWebServers", package: "GCDWebServer"),
+                           .product(name: "WebVideoBoost", package: "WebVideoBoost")],
             swiftSettings: [
                 .unsafeFlags(["-enable-testing"]),
             ]),
