@@ -1,3 +1,4 @@
+import Foundation
 import WebKit
 
 /// WebVideoBoost: PiP + uBOL強化広告ブロック + バックグラウンド再生をひとまとめにするFacade。
@@ -26,6 +27,20 @@ public final class WebVideoBoost {
         self.pip = VideoPiPController()
         self.background = BackgroundPlaybackController()
         self.adblock = UBOLContentBlocker()
+        Self.lock.lock()
+        Self.live.add(self)
+        Self.lock.unlock()
+    }
+
+    private static let live = NSHashTable<WebVideoBoost>.weakObjects()
+    private static let lock = NSLock()
+
+    /// 全ての生存中インスタンスにバックグラウンド突入を通知する。
+    public static func didEnterBackgroundAll() {
+        lock.lock()
+        let all = live.allObjects
+        lock.unlock()
+        for boost in all { boost.didEnterBackground() }
     }
 
     // MARK: - Static (configuration生成時に呼ぶ)

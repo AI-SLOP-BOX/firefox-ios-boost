@@ -9,6 +9,7 @@ import Common
 import Glean
 import TabDataStore
 import TipKit
+import WebEngine
 
 import class MozillaAppServices.Viaduct
 
@@ -258,6 +259,7 @@ class AppDelegate: UIResponder,
         singleShotTimer.resume()
         shutdownWebServer = singleShotTimer
         backgroundWorkUtility?.scheduleOnAppBackground()
+        WebVideoBoostIntegration.handleAppDidEnterBackground()
 
         logger.log("applicationDidEnterBackground end", level: .info, category: .lifecycle)
     }

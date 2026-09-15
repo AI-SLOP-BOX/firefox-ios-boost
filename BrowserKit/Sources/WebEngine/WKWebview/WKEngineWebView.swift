@@ -5,6 +5,7 @@
 import Common
 import Foundation
 import WebKit
+import WebVideoBoost
 
 @MainActor
 protocol WKEngineWebViewDelegate: AnyObject {
@@ -138,6 +139,7 @@ final class DefaultWKEngineWebView: WKWebView,
     private var pullRefreshViewHeightConstraint: NSLayoutConstraint?
     private var pullRefreshViewWidthConstraint: NSLayoutConstraint?
     private var observedTokens = [NSKeyValueObservation]()
+    private let boost = WebVideoBoost()
 
     override var inputAccessoryView: UIView? {
         if let delegatePreference = delegate?.tabWebViewInputAccessoryView(self) {
@@ -169,6 +171,8 @@ final class DefaultWKEngineWebView: WKWebView,
         pullRefreshViewType = parameters.pullRefreshType
         super.init(frame: frame, configuration: configuration.webViewConfiguration)
 
+        BoostSettings.load().apply(to: boost)
+        boost.attach(to: self)
         engineScrollView = scrollView
         scrollView.delegate = self
         setupObservers()
